@@ -96,11 +96,15 @@ export class Vehicle {
       if (!res.hit) continue;
       const dx = res.x - cx, dz = res.z - cz;
       this.x += dx; this.z += dz;
-      const vn = this.vx * res.nx + this.vz * res.nz;
+      // use the net push as the contact normal: wedged between two boxes, the last box's own
+      // normal can point sideways and leave the car pinned at full speed
+      const dl = Math.hypot(dx, dz);
+      const nx = dl > 1e-6 ? dx / dl : res.nx, nz = dl > 1e-6 ? dz / dl : res.nz;
+      const vn = this.vx * nx + this.vz * nz;
       if (vn < 0) {
-        this.vx -= vn * res.nx * 1.35; this.vz -= vn * res.nz * 1.35;
+        this.vx -= vn * nx * 1.35; this.vz -= vn * nz * 1.35;
         this.vx *= 0.92; this.vz *= 0.92;
-        this.yaw += k * (this.fwdX * res.nz - this.fwdZ * res.nx) * Math.min(0.08, -vn * 0.01);
+        this.yaw += k * (this.fwdX * nz - this.fwdZ * nx) * Math.min(0.08, -vn * 0.01);
         this.impact(-vn, res.x, res.z);
       }
     }
@@ -155,8 +159,8 @@ export class Vehicle {
     }
     if (this.model.lightbar) {
       const on = this.siren ? (Math.floor(game.time * 6) % 2) : -1;
-      this.model.lightbar.red.emissiveIntensity = on === 0 ? 6 : 0;
-      this.model.lightbar.blue.emissiveIntensity = on === 1 ? 6 : 0;
+      this.model.lightbar.red.emissiveIntensity = on === 0 ? 7 : on === 1 ? 0.6 : 0;
+      this.model.lightbar.blue.emissiveIntensity = on === 1 ? 7 : on === 0 ? 0.6 : 0;
     }
     void vr; void s;
   }

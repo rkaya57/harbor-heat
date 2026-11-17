@@ -141,7 +141,7 @@ function muzzle(x, y, z, dx, dy, dz) {
 function impact(e) {
   tracer(e.x0, e.y0, e.z0, e.x, e.y, e.z);
   if (e.flesh) {
-    for (let i = 0; i < 6; i++) smoke.spawn(e.x, e.y, e.z, rng.range(-1.5, 1.5), rng.range(0, 2), rng.range(-1.5, 1.5), 0.4, 0.35, 0.55, 0.02, 0.02, 0.6, 6, 2);
+    for (let i = 0; i < 4; i++) smoke.spawn(e.x, e.y, e.z, rng.range(-1.2, 1.2), rng.range(0, 1.6), rng.range(-1.2, 1.2), 0.3, 0.13, 0.5, 0.02, 0.02, 0.15, 8, 2);
   } else {
     sparks(e.x, e.y, e.z, e.metal ? 7 : 3, 4);
     dust(e.x, e.y, e.z, 1, [0.6, 0.58, 0.55]);

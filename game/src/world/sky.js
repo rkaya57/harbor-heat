@@ -9,9 +9,9 @@ const KEYS = [
   [0, 0x050818, 0x1a1838, 0x6a7fb8, 0.25, 0.35, 0x121428],
   [5.2, 0x0d1230, 0x5a3d5c, 0xff9e6b, 0.4, 0.45, 0x3a2f48],
   [6.5, 0x4a83c4, 0xffb98a, 0xffc48a, 1.6, 0.8, 0xe8b9a0],
-  [9, 0x3d8fdc, 0xbfe3f4, 0xfff1d8, 2.8, 1.0, 0xbcdcec],
-  [15, 0x3a8ad8, 0xc6e4f0, 0xfff0d0, 2.9, 1.0, 0xc2deea],
-  [17.6, 0x5277c0, 0xffb27a, 0xffb070, 2.5, 0.85, 0xf2b48e],
+  [9, 0x2a7ad6, 0xa6d6f2, 0xfff1d8, 3.0, 0.8, 0xb4d8ec],
+  [15, 0x2878d4, 0xb0dcf2, 0xffeccc, 3.1, 0.8, 0xbcdcec],
+  [17.6, 0x3d66c0, 0xffa66a, 0xffa860, 2.8, 0.7, 0xf0ac86],
   [19.0, 0x3a2c6e, 0xff6e5a, 0xff7a4a, 1.3, 0.6, 0xc06a6a],
   [20.2, 0x10153a, 0x6a3a6a, 0x8a7ad0, 0.45, 0.4, 0x3a2a4a],
   [24, 0x050818, 0x1a1838, 0x6a7fb8, 0.25, 0.35, 0x121428],
@@ -62,6 +62,28 @@ export class Sky {
     this.night = 0;
     this.hour = 16.5;
     this.renderer = renderer;
+    // Reflection environment: a tiny copy of the sky dome baked through PMREM. Glass towers, car
+    // paint and the water pick up the time-of-day colours; rebaked every ~20 game minutes.
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.envScene = new THREE.Scene();
+    const envDome = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), dome.material);
+    envDome.frustumCulled = false;
+    this.envScene.add(envDome);
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(30, 16), new THREE.MeshBasicMaterial({ color: 0x8a7a68 }));
+    ground.rotation.x = -Math.PI / 2; ground.position.y = -2;
+    this.envScene.add(ground);
+    this.envGround = ground;
+    this.envHour = -99;
+    this.envTarget = null;
+  }
+
+  bakeEnvironment() {
+    const prev = this.envTarget;
+    this.envGround.material.color.setRGB(0.5, 0.44, 0.38).multiplyScalar(1 - this.night * 0.85);
+    this.envTarget = this.pmrem.fromScene(this.envScene, 0, 0.1, 100);
+    this.scene.environment = this.envTarget.texture;
+    this.scene.environmentIntensity = 0.45 + 0.35 * (1 - this.night);
+    if (prev) prev.dispose();
   }
 
   sample(hour) {
@@ -99,6 +121,8 @@ export class Sky {
     waterUniforms.uNight.value = this.night;
     waterUniforms.uSun.value.copy(dir);
     waterUniforms.uSky.value.copy(k.horizon).lerp(k.top, 0.3);
-    this.renderer.toneMappingExposure = 1.0 + this.night * 0.35;
+    this.renderer.toneMappingExposure = 1.05 + this.night * 0.15;
+    const dh = Math.abs(hour - this.envHour);
+    if (dh > 0.33 && dh < 23.67) { this.envHour = hour; this.bakeEnvironment(); }
   }
 }

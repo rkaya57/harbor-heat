@@ -116,9 +116,11 @@ export function fireWeapon(shooter, mx, my, mz, ax, ay, az, accuracy = 1) {
     const h = traceBullet(shooter, mx, my, mz, ex / l, ey / l, ez / l, w.range);
     game.emit('impact', { x0: mx, y0: my, z0: mz, x: h.x, y: h.y, z: h.z, flesh: !!h.target, metal: !!h.car });
     if (h.target) {
-      const head = h.y - h.target.pos.y > 1.55;
+      // NPC fire on the player is toned down and never headshots, so a stray shotgun can't one-shot you
+      const vsPlayer = h.target === game.player;
+      const head = !vsPlayer && h.y - h.target.pos.y > 1.55;
       const falloff = 1 - Math.min(0.5, h.t / w.range * 0.6);
-      h.target.damage(w.dmg * falloff * (head ? 2.2 : 1), shooter, ex / l, ez / l);
+      h.target.damage(w.dmg * falloff * (head ? 2.2 : 1) * (vsPlayer ? 0.55 : 1), shooter, ex / l, ez / l);
       hitAny = true;
       if (head) game.emit('headshot', { target: h.target, source: shooter });
     } else if (h.car) {

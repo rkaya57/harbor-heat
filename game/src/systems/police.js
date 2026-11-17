@@ -52,7 +52,7 @@ export function initPolice() {
     let heat = CRIME_HEAT[e.type] ?? 10;
     if (e.victim?.role === 'cop') heat = e.type === 'murder' ? CRIME_HEAT.copKill : CRIME_HEAT.copHurt;
     if (witnessed(e.x, e.z)) addHeat(heat);
-    else if (!e.quiet && rng.chance(e.type === 'murder' || e.type === 'gunfire' ? 0.45 : 0.15)) setTimeout(() => addHeat(Math.max(1, heat * 0.6)), 2500);
+    else if (!e.quiet && rng.chance(e.type === 'murder' ? 0.8 : e.type === 'gunfire' ? 0.5 : 0.2)) setTimeout(() => addHeat(Math.max(1, heat * 0.6)), 2500);
   });
   game.on('hit', (e) => {
     if (e.source === game.player && e.target.role === 'cop' && !game.flags.noPolice) addHeat(e.target.alive ? CRIME_HEAT.copHurt : 0);
@@ -113,7 +113,9 @@ function pursue(v, dt) {
   }
   // stuck: reverse out
   b.stopT = v.absSpeed < 1 ? b.stopT + dt : 0;
-  if (b.stopT > 1.5) { v.ctl.throttle = -1; v.ctl.steer = -v.ctl.steer || 1; if (b.stopT > 3) b.stopT = 0; }
+  if (b.stopT > 1.5) { v.ctl.throttle = -1; v.ctl.steer = -v.ctl.steer || 1; if (b.stopT > 3) { b.stopT = 0; b.stuckCount = (b.stuckCount || 0) + 1; } }
+  if (b.stopT === 0 && v.absSpeed > 3) b.stuckCount = 0;
+  if ((b.stuckCount || 0) >= 3 && d > 90) { v.pursuit = false; v.siren = false; b.kind = 'traffic'; } // gives up; a fresh unit spawns
   return { los };
 }
 

@@ -24,7 +24,7 @@ function facadeMaterial() {
         uniform float uNight; varying vec3 vWP; varying vec3 vWN; varying vec2 vStyle;
         float hh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-        float hhWin = 0.0; float hhLit = 0.0;
+        float hhWin = 0.0; float hhLit = 0.0; vec3 hhTint = vec3(1.0);
         vec3 hhN = normalize(vWN);
         float st = vStyle.x;
         if (abs(hhN.y) < 0.5) {
@@ -53,22 +53,26 @@ function facadeMaterial() {
           }
           if (st < 2.5 && f.y < 3.6) {
             float sf = step(0.08, fract(along / 6.0)) * step(0.5, f.y) * step(f.y, 3.1);
-            hhWin = sf; rnd = 0.9;
+            hhWin = sf; rnd = 0.62 + 0.3 * hh(vec2(floor(along / 6.0), vStyle.y));
             diffuseColor.rgb *= step(3.1, f.y) * 0.25 + 0.75;
           }
           vec3 glassDay = mix(vec3(0.13, 0.2, 0.27), vec3(0.42, 0.58, 0.68), rnd * 0.55 + clamp(vWP.y / 120.0, 0.0, 0.4));
           if (st < 0.5) glassDay = mix(glassDay, vec3(0.55, 0.72, 0.82), 0.35);
           vec3 glassNight = vec3(0.04, 0.05, 0.08);
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(glassDay, glassNight, uNight), hhWin);
-          hhLit = hhWin * step(0.45, rnd) * uNight;
+          // per-window brightness and tint: warm tungsten, a few cool TV-blue rooms, dim curtains
+          hhLit = hhWin * step(0.45, rnd) * uNight * (0.25 + 0.5 * fract(rnd * 7.31));
+          hhTint = mix(vec3(1.0, 0.7, 0.38), vec3(0.6, 0.75, 1.0), step(0.82, fract(rnd * 13.7)));
           diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(0.0, 4.0, f.y));
         } else if (hhN.y > 0.5) {
           diffuseColor.rgb = mix(diffuseColor.rgb * 0.5, vec3(0.42, 0.41, 0.4), 0.7) * (0.9 + 0.1 * hh(floor(vWP.xz * 2.0)));
         }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.12, hhWin);`)
+        roughnessFactor = mix(roughnessFactor, 0.08, hhWin);`)
+      .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+        metalnessFactor = mix(metalnessFactor, 0.7, hhWin * (1.0 - uNight));`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += hhLit * vec3(1.0, 0.78, 0.45) * 1.25;`);
+        totalEmissiveRadiance += hhLit * hhTint;`);
   };
   return mat;
 }

@@ -88,6 +88,8 @@ export const sfx = {
     (seqs[kind] || seqs.start).forEach((f, i) => { tone({ freq: f, dur: 0.5, type: 'triangle', gain: 0.18, delay: i * 0.14, out: audio.sfx }); tone({ freq: f / 2, dur: 0.6, type: 'sawtooth', gain: 0.05, delay: i * 0.14 }); });
   },
 };
+// Before the first user gesture there is no AudioContext: every effect becomes a silent no-op.
+for (const k of Object.keys(sfx)) { const fn = sfx[k]; sfx[k] = (...a) => { if (audio.ready) fn(...a); }; }
 
 // ---------- continuous loops ----------
 const loops = {};

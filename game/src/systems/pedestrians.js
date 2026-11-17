@@ -8,6 +8,7 @@ import { rng, angleDiff } from '../core/rng.js';
 import { punch } from './combat.js';
 import { spawnPickup } from './pickups.js';
 import { dust } from './effects.js';
+import { setCastShadow } from '../entities/models.js';
 
 const PED_TARGET = 34;
 // For each corner of a block: [neighbour dx, dz, corner index on that block] across both roads.
@@ -81,7 +82,8 @@ export function updatePedestrians(dt) {
     if ((d > 140 && !c.keep) || (!c.alive && c.deadT > 25 && d > 30)) {
       c.dispose(); game.peds.splice(i, 1); continue;
     }
-    c.root.visible = d < 150;
+    c.root.visible = d < 95;
+    setCastShadow(c.root, d < 38);
     if (c.role !== 'ped') continue;
     if (c.alive) alive++;
     if (!c.alive) { c.update(dt); continue; }
@@ -183,7 +185,7 @@ function runOver() {
       v.vx *= 0.92; v.vz *= 0.92;
       dust(c.pos.x, c.pos.y + 0.5, c.pos.z, 3);
       game.emit('runOver', { car: v, target: c, killed });
-      if (v.driver === game.player) game.emit('crime', { type: killed ? 'murder' : 'assault', x: c.pos.x, z: c.pos.z, victim: c });
+      if (v.driver === game.player) if (!killed) game.emit('crime', { type: 'assault', x: c.pos.x, z: c.pos.z, victim: c }); // a kill already reports murder via 'death'
       void angleDiff;
     }
   }

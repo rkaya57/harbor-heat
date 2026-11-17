@@ -5,7 +5,7 @@ import { input, setWantLock } from '../core/input.js';
 import { listSlots, latestSave, saveTo } from '../systems/saveGame.js';
 import { SHOP, buy } from '../systems/services.js';
 import { MISSIONS, missionState } from '../systems/missions.js';
-import { sfx } from '../audio/soundFx.js';
+import { sfx, initAudio } from '../audio/soundFx.js';
 import { setMasterVolume, setMusicVolume } from '../audio/soundFx.js';
 import { drawBigMap } from './hud.js';
 
@@ -28,7 +28,7 @@ function buildMenu(navId, items) {
     b.textContent = it.label;
     b.disabled = !!it.disabled;
     b.onmouseenter = () => select(i);
-    b.onclick = () => { if (!it.disabled) { sfx.click?.(); it.action(); } };
+    b.onclick = () => { if (!it.disabled) { initAudio(); sfx.click(); it.action(); } };
     nav.appendChild(b);
     return b;
   });

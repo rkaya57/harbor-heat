@@ -1,7 +1,9 @@
-// Procedural model factories: jointed low-poly people (with outfits per role) and cars by type
-// (sedan, sport, van, pickup, cab, police cruiser, armoured van). Geometry and materials are shared.
+// Procedural model factories: jointed low-poly people (outfits per role) and cars by type
+// (sedan, sport, van, pickup, cab, police cruiser, armoured van). Parts that move together are
+// merged into one vertex-coloured mesh, so a car is ~9 draw calls and a person ~10.
 import * as THREE from 'three';
 import { textTexture } from '../world/textures.js';
+import { GeoBuilder } from '../world/geometry.js';
 import { rng } from '../core/rng.js';
 
 const mats = new Map();
@@ -10,25 +12,8 @@ export function mat(color, opts = {}) {
   if (!mats.has(k)) mats.set(k, new THREE.MeshStandardMaterial({ color, roughness: 0.7, ...opts }));
   return mats.get(k);
 }
-const box = (w, h, d, y = 0) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(0, y, 0); return g; };
-const G = {
-  torso: box(0.5, 0.62, 0.28, 0.31),
-  chest: box(0.52, 0.2, 0.3, 0.52),
-  head: box(0.26, 0.3, 0.28, 0.15),
-  hair: box(0.28, 0.1, 0.3, 0.31),
-  cap: box(0.3, 0.08, 0.36, 0.33),
-  limbU: box(0.14, 0.34, 0.14, -0.17),
-  limbL: box(0.12, 0.34, 0.12, -0.17),
-  legU: box(0.18, 0.46, 0.2, -0.23),
-  legL: box(0.15, 0.46, 0.16, -0.23),
-  shoe: box(0.17, 0.1, 0.28, -0.05),
-  hand: box(0.1, 0.1, 0.1, -0.05),
-  pistol: box(0.06, 0.12, 0.3, 0),
-  smg: box(0.07, 0.16, 0.5, 0),
-  shotgun: box(0.07, 0.1, 0.8, 0),
-  vest: box(0.54, 0.4, 0.32, 0.36),
-  badge: box(0.08, 0.08, 0.02, 0),
-};
+const rgb = (hex) => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
+const skinMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
 
 const SKIN = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac, 0x6b4226];
 const HAIR = [0x1b1b1b, 0x3b2a20, 0x6a4e2e, 0xc9a24a, 0x9a3b2a, 0xdddddd];
@@ -43,59 +28,76 @@ export const OUTFITS = {
   ally: { skin: 0x8d5524, hair: 0x1b1b1b, shirt: 0xff4fa3, pants: 0x111111, shoe: 0x111111 },
 };
 
-function limb(parent, upperGeo, lowerGeo, material, x, y, len = 0.34) {
-  const upper = new THREE.Mesh(upperGeo, material);
-  upper.position.set(x, y, 0);
-  const lower = new THREE.Mesh(lowerGeo, material);
-  lower.position.y = -len;
-  upper.add(lower);
-  parent.add(upper);
-  return { upper, lower };
+function part(build, parent, x, y, z = 0) {
+  const g = new GeoBuilder();
+  build(g);
+  const m = new THREE.Mesh(g.build(), skinMat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  parent.add(m);
+  return m;
 }
 
-/** A jointed person. Returns {root, parts} where parts holds pivots the animator drives. */
-export function makeHuman(role = 'ped', seedPick = rng) {
+/** A jointed person. Returns {root, parts}; parts holds the pivots the animator drives. */
+export function makeHuman(role = 'ped', pick = rng) {
   const o = { ...(OUTFITS[role] || {}) };
-  const skin = mat(o.skin ?? seedPick.pick(SKIN));
-  const shirt = mat(o.shirt ?? seedPick.pick(SHIRT));
-  const pants = mat(o.pants ?? seedPick.pick(PANTS));
-  const shoeM = mat(o.shoe ?? 0x222222);
-  const sleeve = o.jacket ? mat(o.jacket) : shirt;
+  const skin = rgb(o.skin ?? pick.pick(SKIN));
+  const shirt = rgb(o.shirt ?? pick.pick(SHIRT));
+  const pants = rgb(o.pants ?? pick.pick(PANTS));
+  const shoe = rgb(o.shoe ?? 0x222222);
+  const sleeve = o.jacket ? rgb(o.jacket) : shirt;
+  const hair = rgb(o.cap ?? o.hair ?? pick.pick(HAIR));
   const root = new THREE.Group();
   const body = new THREE.Group();
   body.position.y = 0.98;
   root.add(body);
-  const torso = new THREE.Mesh(G.torso, o.jacket ? mat(o.jacket) : shirt);
-  body.add(torso);
-  if (o.jacket) { const inner = new THREE.Mesh(box(0.2, 0.5, 0.02, 0.33), shirt); inner.position.z = 0.15; body.add(inner); }
-  if (o.vest) { const v = new THREE.Mesh(G.vest, mat(o.vest)); body.add(v); const b = new THREE.Mesh(G.badge, mat(0xffd700, { metalness: 0.8, roughness: 0.3 })); b.position.set(0.14, 0.48, 0.17); body.add(b); }
+  part((g) => {
+    g.box(0, 0, 0, 0.5, 0.62, 0.28, 1, o.jacket ? rgb(o.jacket) : shirt);
+    g.box(0, 0.42, 0, 0.53, 0.2, 0.3, 1, o.jacket ? rgb(o.jacket) : shirt);
+    if (o.jacket) g.box(0, 0.08, 0.13, 0.2, 0.5, 0.04, 1, shirt);
+    if (o.vest) { g.box(0, 0.16, 0, 0.55, 0.42, 0.33, 1, rgb(o.vest)); g.box(0.14, 0.44, 0.17, 0.08, 0.08, 0.02, 1, rgb(0xffd700)); }
+    g.box(0, -0.06, 0, 0.51, 0.08, 0.29, 1, rgb(0x222222)); // belt
+  }, body, 0, 0);
   const neck = new THREE.Group();
   neck.position.y = 0.64;
   body.add(neck);
-  const head = new THREE.Mesh(G.head, skin);
-  neck.add(head);
-  const hair = new THREE.Mesh(o.cap ? G.cap : G.hair, mat(o.cap ?? o.hair ?? seedPick.pick(HAIR)));
-  neck.add(hair);
-  if (o.cap) { const brim = new THREE.Mesh(box(0.26, 0.03, 0.14, 0.3), mat(o.cap)); brim.position.z = 0.2; neck.add(brim); }
-  const armL = limb(body, G.limbU, G.limbL, sleeve, -0.33, 0.58);
-  const armR = limb(body, G.limbU, G.limbL, sleeve, 0.33, 0.58);
-  for (const a of [armL, armR]) { const h = new THREE.Mesh(G.hand, skin); h.position.y = -0.34; a.lower.add(h); }
-  const legL = limb(root, G.legU, G.legL, pants, -0.13, 0.98, 0.46);
-  const legR = limb(root, G.legU, G.legL, pants, 0.13, 0.98, 0.46);
-  for (const l of [legL, legR]) { const s = new THREE.Mesh(G.shoe, shoeM); s.position.set(0, -0.46, 0.04); l.lower.add(s); }
+  part((g) => {
+    g.box(0, 0, 0, 0.26, 0.3, 0.28, 1, skin);
+    g.box(0, 0.26, -0.01, 0.28, o.cap ? 0.08 : 0.1, 0.3, 1, hair);
+    if (o.cap) g.box(0, 0.27, 0.2, 0.26, 0.03, 0.14, 1, hair);
+    g.box(-0.06, 0.16, 0.141, 0.04, 0.04, 0.01, 1, rgb(0x111111));
+    g.box(0.06, 0.16, 0.141, 0.04, 0.04, 0.01, 1, rgb(0x111111));
+  }, neck, 0, 0);
+  const limb = (x, y, upperLen, w, colU, colL, end) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, 0);
+    const upper = part((g) => g.box(0, -upperLen, 0, w, upperLen, w, 1, colU), pivot, 0, 0);
+    upper.position.set(0, 0, 0);
+    const lower = new THREE.Group();
+    lower.position.y = -upperLen;
+    pivot.add(lower);
+    part((g) => { g.box(0, -upperLen, 0, w * 0.85, upperLen, w * 0.85, 1, colL); end(g); }, lower, 0, 0);
+    return { upper: pivot, lower };
+  };
+  const armL = limb(-0.33, 0.58, 0.34, 0.14, sleeve, sleeve, (g) => g.box(0, -0.44, 0, 0.1, 0.1, 0.1, 1, skin));
+  const armR = limb(0.33, 0.58, 0.34, 0.14, sleeve, sleeve, (g) => g.box(0, -0.44, 0, 0.1, 0.1, 0.1, 1, skin));
+  body.add(armL.upper, armR.upper);
+  const legL = limb(-0.13, 0.98, 0.46, 0.19, pants, pants, (g) => g.box(0, -0.52, 0.04, 0.17, 0.1, 0.28, 1, shoe));
+  const legR = limb(0.13, 0.98, 0.46, 0.19, pants, pants, (g) => g.box(0, -0.52, 0.04, 0.17, 0.1, 0.28, 1, shoe));
+  root.add(legL.upper, legR.upper);
   const gunHolder = new THREE.Group();
   gunHolder.position.set(0, -0.36, 0.06);
   armR.lower.add(gunHolder);
-  root.traverse((m) => { if (m.isMesh) m.castShadow = true; });
   return { root, parts: { body, neck, armL, armR, legL, legR, gunHolder, gun: null } };
 }
 
 const gunMat = mat(0x1d1f22, { metalness: 0.7, roughness: 0.35 });
+const GUNS = { pistol: [0.06, 0.12, 0.3], smg: [0.07, 0.16, 0.5], shotgun: [0.07, 0.1, 0.8] };
 export function setHeldWeapon(parts, weaponId) {
   if (parts.gun) { parts.gunHolder.remove(parts.gun); parts.gun = null; }
-  const geo = weaponId === 'pistol' ? G.pistol : weaponId === 'smg' ? G.smg : weaponId === 'shotgun' ? G.shotgun : null;
-  if (!geo) return;
-  const g = new THREE.Mesh(geo, gunMat);
+  const s = GUNS[weaponId];
+  if (!s) return;
+  const g = new THREE.Mesh(new THREE.BoxGeometry(...s), gunMat);
   g.rotation.x = Math.PI / 2;
   g.position.z = 0.1;
   parts.gunHolder.add(g);
@@ -113,99 +115,110 @@ export const CAR_TYPES = {
   armored: { len: 5.6, wid: 2.3, hgt: 1.7, cab: [2.1, 0.55, 1.2, -2.1], accel: 9, top: 32, grip: 6.5, mass: 2.2, hp: 260, colors: [0x5d6d5f] },
 };
 
-const wheelGeo = new THREE.CylinderGeometry(0.37, 0.37, 0.28, 14);
-wheelGeo.rotateZ(Math.PI / 2);
-const hubGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.3, 8);
-hubGeo.rotateZ(Math.PI / 2);
-const glassMat = new THREE.MeshStandardMaterial({ color: 0x1a2a38, roughness: 0.08, metalness: 0.6 });
-const tyreMat = mat(0x151515, { roughness: 0.9 });
-const hubMat = mat(0xc8ccd0, { metalness: 0.8, roughness: 0.3 });
-const chromeMat = mat(0xdddddd, { metalness: 0.9, roughness: 0.2 });
-const blackMat = mat(0x111111, { roughness: 0.6 });
+const trimMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, metalness: 0.55 });
+const BLACK = [0.06, 0.06, 0.07], CHROME = [0.8, 0.8, 0.82], GLASS = [0.07, 0.12, 0.17], WHITE = [0.95, 0.95, 0.95];
+
+function wheelGeometry() {
+  const tyre = new THREE.CylinderGeometry(0.37, 0.37, 0.28, 14);
+  const hub = new THREE.CylinderGeometry(0.21, 0.21, 0.3, 8);
+  const merged = new THREE.BufferGeometry();
+  const parts = [[tyre, [0.08, 0.08, 0.08]], [hub, [0.78, 0.8, 0.82]]];
+  const pos = [], nrm = [], col = [], idx = [];
+  for (const [g, c] of parts) {
+    const base = pos.length / 3;
+    const ng = g.toNonIndexed();
+    const p = ng.attributes.position.array, n = ng.attributes.normal.array;
+    for (let i = 0; i < p.length; i += 3) { pos.push(p[i + 1], p[i], p[i + 2]); nrm.push(n[i + 1], n[i], n[i + 2]); col.push(...c); idx.push(base + i / 3); }
+  }
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  merged.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  merged.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  // swapping x/y mirrors the winding; flip the index order to keep faces outward
+  for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
+  merged.setIndex(idx);
+  return merged;
+}
+const WHEEL = wheelGeometry();
+const wheelMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.3 });
+const plateMats = new Map();
 
 export function makeCar(type = 'sedan', color) {
   const t = CAR_TYPES[type];
-  const paint = new THREE.MeshStandardMaterial({ color: color ?? rng.pick(t.colors), roughness: 0.28, metalness: 0.45 });
+  const paint = new THREE.MeshStandardMaterial({ color: color ?? rng.pick(t.colors), roughness: 0.32, metalness: 0.22 });
   const root = new THREE.Group();
   const body = new THREE.Group(); // rolls/pitches on its springs
   root.add(body);
   const L = t.len, W = t.wid, H = t.hgt, base = 0.32;
-  const lower = new THREE.Mesh(box(W, H, L, base + H / 2), paint);
-  body.add(lower);
-  const skirt = new THREE.Mesh(box(W + 0.04, 0.16, L - 1.6, base + 0.08), blackMat);
-  body.add(skirt);
   const [cw, ch, cl, cz] = t.cab;
-  const cabin = new THREE.Mesh(box(cw, ch, cl, base + H + ch / 2), glassMat);
-  cabin.position.z = cz;
-  body.add(cabin);
-  const roof = new THREE.Mesh(box(cw + 0.02, 0.08, cl * 0.82, base + H + ch + 0.02), paint);
-  roof.position.z = cz;
-  body.add(roof);
-  for (const s of [-1, 1]) { // pillars give the glass house a frame
-    const p = new THREE.Mesh(box(0.08, ch, 0.1, base + H + ch / 2), paint);
-    p.position.set(s * cw / 2, 0, cz + cl / 2 - 0.05);
-    body.add(p);
-  }
-  if (type === 'pickup') {
-    const bed = new THREE.Mesh(box(W - 0.1, 0.35, L * 0.4, base + H + 0.17), paint);
-    bed.position.z = -L * 0.28;
-    const inner = new THREE.Mesh(box(W - 0.3, 0.36, L * 0.38, base + H + 0.2), blackMat);
-    inner.position.z = -L * 0.28;
-    body.add(bed, inner);
-  }
-  if (type === 'van' || type === 'armored') {
-    const back = new THREE.Mesh(box(W, 0.02, L * 0.6, base + H + 0.01), paint);
-    back.position.z = -L * 0.18;
-    body.add(back);
-  }
-  // bumpers, grille, lights
-  const front = new THREE.Mesh(box(W + 0.05, 0.22, 0.2, base + 0.18), type === 'sport' ? blackMat : chromeMat);
-  front.position.z = L / 2;
-  const rear = front.clone();
-  rear.position.z = -L / 2;
-  body.add(front, rear);
+  const top = base + H;
+
+  // painted shell
+  const p = new GeoBuilder();
+  p.box(0, base, 0, W, H, L, 1, WHITE);
+  p.box(0, top + ch, cz, cw + 0.02, 0.08, cl * 0.82, 1, WHITE);
+  for (const s of [-1, 1]) { p.box(s * cw / 2, top, cz + cl / 2 - 0.05, 0.08, ch, 0.1, 1, WHITE); p.box(s * cw / 2, top, cz - cl / 2 + 0.05, 0.08, ch, 0.1, 1, WHITE); }
+  if (type === 'sport') p.box(0, top, -L / 2 + 0.3, W - 0.2, 0.1, 0.4, 1, WHITE); // spoiler deck
+  if (type === 'pickup') { p.box(0, top, -L * 0.28, W - 0.1, 0.35, L * 0.4, 1, WHITE); }
+  const doors = type === 'police'; // white door panels go on the trim mesh (paint would tint them black)
+  if (type === 'cab') for (const s of [-1, 1]) p.box(s * (W / 2 + 0.005), base + H * 0.3, 0, 0.02, 0.12, L * 0.8, 1, [0.05, 0.05, 0.05]);
+  paint.vertexColors = true; // white shell tinted by the paint colour; decals keep their own tone
+  body.add(new THREE.Mesh(p.build(), paint));
+
+  // glass, rubber, chrome trim
+  const k = new GeoBuilder();
+  k.box(0, top, cz, cw, ch, cl, 1, GLASS);
+  k.box(0, base, 0, W + 0.04, 0.16, L - 1.6, 1, BLACK);
+  k.box(0, base + 0.08, L / 2, W + 0.05, 0.22, 0.2, 1, type === 'sport' ? BLACK : CHROME);
+  k.box(0, base + 0.08, -L / 2, W + 0.05, 0.22, 0.2, 1, type === 'sport' ? BLACK : CHROME);
+  k.box(0, base + 0.3, L / 2 + 0.01, W * 0.4, 0.16, 0.04, 1, BLACK); // grille
+  for (const s of [-1, 1]) k.box(s * (W / 2 + 0.05), top - 0.05, cz + cl / 2 - 0.2, 0.12, 0.1, 0.18, 1, BLACK); // mirrors
+  if (type === 'pickup') k.box(0, top + 0.03, -L * 0.28, W - 0.3, 0.33, L * 0.38, 1, BLACK);
+  if (type === 'sport') for (const s of [-1, 1]) k.box(s * (W / 2 - 0.15), top + 0.1, -L / 2 + 0.3, 0.06, 0.25, 0.06, 1, BLACK);
+  if (doors) for (const s of [-1, 1]) k.box(s * (W / 2 + 0.01), base + H * 0.12, 0, 0.03, H * 0.76, L * 0.44, 1, [0.92, 0.92, 0.9]);
+  if (type === 'armored') for (let i = -2; i <= 2; i++) k.box(0, top - 0.6, i * 0.9 - 0.6, W + 0.03, 0.08, 0.1, 1, BLACK);
+  const trim = new THREE.Mesh(k.build(), trimMat);
+  body.add(trim);
+
+  // lamps (own materials so brake lights and headlights can glow per car)
   const headMat = new THREE.MeshStandardMaterial({ color: 0xfffbe6, emissive: 0xfff2cc, emissiveIntensity: 0.4 });
   const tailMat = new THREE.MeshStandardMaterial({ color: 0x8a0000, emissive: 0xff1a1a, emissiveIntensity: 0.5 });
+  const hl = new GeoBuilder(), tl = new GeoBuilder();
   for (const s of [-1, 1]) {
-    const hl = new THREE.Mesh(box(0.42, 0.14, 0.06, base + H - 0.16), headMat);
-    hl.position.set(s * (W / 2 - 0.3), 0, L / 2 + 0.01);
-    const tl = new THREE.Mesh(box(0.42, 0.14, 0.06, base + H - 0.16), tailMat);
-    tl.position.set(s * (W / 2 - 0.3), 0, -L / 2 - 0.01);
-    body.add(hl, tl);
+    hl.box(s * (W / 2 - 0.3), top - 0.23, L / 2 + 0.01, 0.42, 0.14, 0.06);
+    tl.box(s * (W / 2 - 0.3), top - 0.23, -L / 2 - 0.01, 0.42, 0.14, 0.06);
   }
-  // plate
-  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.13), new THREE.MeshBasicMaterial({ map: textTexture('SB ' + Math.floor(rng.next() * 9000 + 1000), '#f3f3f3', '#123') }));
+  body.add(new THREE.Mesh(hl.build(), headMat), new THREE.Mesh(tl.build(), tailMat));
+
+  // number plate
+  const num = 'SB ' + Math.floor(rng.next() * 9000 + 1000);
+  if (!plateMats.has(num)) plateMats.set(num, new THREE.MeshBasicMaterial({ map: textTexture(num, '#f3f3f3', '#123') }));
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.13), plateMats.get(num));
   plate.position.set(0, base + 0.2, -L / 2 - 0.12);
   plate.rotation.y = Math.PI;
   body.add(plate);
 
   let lightbar = null;
   if (type === 'police') {
-    const doorMat = mat(0xf4f4f4, { roughness: 0.3, metalness: 0.3 });
+    const logo = new THREE.MeshBasicMaterial({ map: textTexture('SBPD', '#f4f4f4', '#1d3a7a') });
     for (const s of [-1, 1]) {
-      const d = new THREE.Mesh(box(0.02, H * 0.7, L * 0.42, base + H * 0.5), doorMat);
-      d.position.set(s * (W / 2 + 0.01), 0, 0);
-      body.add(d);
-      const logo = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.34), new THREE.MeshBasicMaterial({ map: textTexture('SBPD', '#f4f4f4', '#1d3a7a'), transparent: false }));
-      logo.position.set(s * (W / 2 + 0.03), base + H * 0.55, 0);
-      logo.rotation.y = s * Math.PI / 2;
-      body.add(logo);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.34), logo);
+      m.position.set(s * (W / 2 + 0.03), base + H * 0.55, 0);
+      m.rotation.y = s * Math.PI / 2;
+      body.add(m);
     }
     const red = new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0xff0000, emissiveIntensity: 0 });
     const blue = new THREE.MeshStandardMaterial({ color: 0x000055, emissive: 0x1e5bff, emissiveIntensity: 0 });
-    const lr = new THREE.Mesh(box(0.6, 0.14, 0.3, base + H + ch + 0.1), red);
-    lr.position.set(-0.33, 0, cz);
-    const lb = new THREE.Mesh(box(0.6, 0.14, 0.3, base + H + ch + 0.1), blue);
-    lb.position.set(0.33, 0, cz);
+    const lr = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.36), red);
+    lr.position.set(-0.33, top + ch + 0.17, cz);
+    const lb = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.36), blue);
+    lb.position.set(0.33, top + ch + 0.17, cz);
     body.add(lr, lb);
     lightbar = { red, blue };
   }
   if (type === 'cab') {
-    const sign = new THREE.Mesh(box(0.8, 0.22, 0.3, base + H + ch + 0.14), new THREE.MeshBasicMaterial({ map: textTexture('TAXI', '#ffd400', '#111') }));
-    sign.position.z = cz;
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.22, 0.3), new THREE.MeshBasicMaterial({ map: textTexture('TAXI', '#ffd400', '#111') }));
+    sign.position.set(0, top + ch + 0.2, cz);
     body.add(sign);
-    const checker = new THREE.Mesh(box(W + 0.02, 0.1, L * 0.5, base + H * 0.55), blackMat);
-    body.add(checker);
   }
 
   const wheels = [];
@@ -213,13 +226,19 @@ export function makeCar(type = 'sedan', color) {
   for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
     const pivot = new THREE.Group();
     pivot.position.set(sx * (W / 2 - 0.12), 0.37, sz * wb);
-    const tyre = new THREE.Mesh(wheelGeo, tyreMat);
-    const hub = new THREE.Mesh(hubGeo, hubMat);
-    tyre.add(hub);
+    const tyre = new THREE.Mesh(WHEEL, wheelMat);
     pivot.add(tyre);
     root.add(pivot);
     wheels.push({ pivot, tyre, front: sz > 0 });
   }
-  root.traverse((m) => { if (m.isMesh) { m.castShadow = true; } });
+  root.traverse((m) => { if (m.isMesh) m.castShadow = true; });
   return { root, body, wheels, paint, headMat, tailMat, lightbar, spec: t, type };
+}
+
+/** Cheap shadow LOD: only actors near the camera focus cast shadows (halves the shadow pass). */
+export function setCastShadow(root, on) {
+  if (root.userData.shadowOn === on) return;
+  root.userData.shadowOn = on;
+  if (!root.userData.meshes) { const list = []; root.traverse((m) => { if (m.isMesh) list.push(m); }); root.userData.meshes = list; }
+  for (const m of root.userData.meshes) m.castShadow = on;
 }

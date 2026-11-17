@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { game } from './core/game.js';
 import { initInput, input, setWantLock, requestLock } from './core/input.js';
-import { TIME } from './core/config.js';
+import { TIME, BEACH_Z } from './core/config.js';
 import { generateCity, landmarks } from './world/cityLayout.js';
 import { buildTerrain, waterUniforms } from './world/terrain.js';
 import { buildBuildings } from './world/buildings.js';
@@ -32,7 +32,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
@@ -137,12 +137,12 @@ function respawn() {
   flash(0.8);
 }
 
-// title flyover over the bay at golden hour
+// title flyover: a slow drift above Sunset Beach, looking up the Coral Strip toward the sunset
 function titleCamera() {
   rig.override = (cam, t) => {
-    const a = t * 0.035 + 0.6;
-    cam.position.set(Math.cos(a) * 260, 95 + Math.sin(t * 0.1) * 10, Math.sin(a) * 260 + 60);
-    cam.lookAt(0, 10, 40);
+    const x = 60 + Math.sin(t * 0.018) * 150;
+    cam.position.set(x, 34 + Math.sin(t * 0.07) * 4, BEACH_Z + 46);
+    cam.lookAt(x - 120, 8, BEACH_Z - 70);
     if (cam.fov !== 55) { cam.fov = 55; cam.updateProjectionMatrix(); }
   };
 }
@@ -152,8 +152,7 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 // ---------- main loop ----------
-const clock = new THREE.Clock();
-let acc = 0;
+let lastT = performance.now();
 export function step(realDt) {
   const dt = Math.min(0.05, realDt) * game.timeScale;
   menuKeys();
@@ -195,8 +194,7 @@ export function step(realDt) {
 function frame() {
   requestAnimationFrame(frame);
   if (game.shot) return; // the shot director drives frames itself
-  const realDt = clock.getDelta();
-  acc += realDt;
+  const nowT = performance.now(); const realDt = (nowT - lastT) / 1000; lastT = nowT;
   step(realDt);
   renderer.render(scene, camera);
 }
@@ -214,3 +212,4 @@ if (params.get('shot')) {
 }
 requestAnimationFrame(frame);
 window.__game = game;
+window.__step = step; // lets automated playtests advance the simulation deterministically

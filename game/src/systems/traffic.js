@@ -8,6 +8,7 @@ import { DIRS, lanePoint, validNode, NODES_X, NODES_Z, nodePos } from '../world/
 import { LANE, ROAD, CELL } from '../core/config.js';
 import { rng, clamp, angleDiff } from '../core/rng.js';
 import { rig } from './cameraRig.js';
+import { setCastShadow } from '../entities/models.js';
 
 const TRAFFIC_TARGET = 20;
 const TYPES = [['sedan', 36], ['cab', 12], ['van', 11], ['pickup', 14], ['sport', 13], ['police', 6]];
@@ -153,7 +154,8 @@ export function updateTraffic(dt) {
   let moving = 0;
   for (const v of [...game.vehicles]) {
     const d = Math.hypot(v.x - p.x, v.z - p.z);
-    v.root.visible = d < 260;
+    v.root.visible = d < 190;
+    setCastShadow(v.root, d < 60);
     const keep = v === game.player.vehicle || v.mission || v.pursuit;
     if (!keep && d > 210 && !v.parked) { despawnVehicle(v); continue; }
     if (!keep && v.wrecked && v.burnT < -30 && d > 60) { despawnVehicle(v); continue; }

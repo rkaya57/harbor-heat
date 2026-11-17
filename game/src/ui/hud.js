@@ -38,19 +38,15 @@ function renderMapImage() {
   g.fillStyle = '#c9ccd2';
   for (let i = 0; i <= GRID_X; i++) { const [x, z0] = toMap(roadX(i) - ROAD / 2, Z0 - ROAD / 2); g.fillRect(x, z0, ROAD * S, (GRID_Z * 78 + ROAD) * S); }
   for (let j = 0; j <= GRID_Z; j++) { const [x0, z] = toMap(X0 - ROAD / 2, roadZ(j) - ROAD / 2); g.fillRect(x0, z, (GRID_X * 78 + ROAD) * S, ROAD * S); }
-  g.fillStyle = 'rgba(255,255,255,0.85)';
-  g.font = '700 22px "Segoe UI", sans-serif';
-  g.textAlign = 'center';
-  const label = (t, x, z) => { const [mx, mz] = toMap(x, z); g.strokeStyle = 'rgba(0,0,0,0.7)'; g.lineWidth = 5; g.strokeText(t, mx, mz); g.fillText(t, mx, mz); };
-  label('PALM HEIGHTS', roadX(1), roadZ(2) + 40);
-  label('DOWNTOWN SOLARA', roadX(4), roadZ(3) - 40);
-  label('VISTA MIDTOWN', roadX(4), roadZ(0) + 40);
-  label('CORAL STRIP', roadX(3), roadZ(6) - 40);
-  label('OLD PORT', roadX(7), roadZ(3) + 40);
-  label('SUNSET BEACH', 0, BEACH_Z + 30);
-  label('SOLARA BAY', 0, LAND.minZ - 30);
   mapImg = c;
 }
+
+// District names live only on the pause-screen map; on the minimap they would cover the streets.
+const MAP_LABELS = [
+  ['PALM HEIGHTS', () => [roadX(1), roadZ(2) + 40]], ['DOWNTOWN SOLARA', () => [roadX(4), roadZ(3) - 40]],
+  ['VISTA MIDTOWN', () => [roadX(4), roadZ(0) + 40]], ['CORAL STRIP', () => [roadX(3), roadZ(6) - 40]],
+  ['OLD PORT', () => [roadX(7), roadZ(3) + 40]], ['SUNSET BEACH', () => [0, BEACH_Z + 30]], ['SOLARA BAY', () => [0, LAND.minZ - 30]],
+];
 
 const statics = () => [
   { ...landmarks.safehouse, color: '#3ddc84', kind: 'safehouse' },
@@ -131,6 +127,8 @@ export function drawBigMap() {
   const ox = (cv.width - mapW * sc) / 2, oy = (cv.height - mapH * sc) / 2;
   g.drawImage(mapImg, ox, oy, mapW * sc, mapH * sc);
   const at = (x, z) => { const [mx, mz] = toMap(x, z); return [ox + mx * sc, oy + mz * sc]; };
+  g.font = '700 16px "Segoe UI", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const [t, pos] of MAP_LABELS) { const [x, y] = at(...pos()); g.strokeStyle = 'rgba(0,0,0,0.75)'; g.lineWidth = 4; g.strokeText(t, x, y); g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillText(t, x, y); }
   for (const p of game.pickups) if (p.type === 'token' && !p.hidden) { const [x, y] = at(p.x, p.z); drawBlip(g, x, y, { color: '#2fd3c4', small: true }); }
   for (const b of blipList()) { const [x, y] = at(b.x, b.z); drawBlip(g, x, y, b, 7); if (b.label) { g.fillStyle = '#ffd23f'; g.font = '700 14px sans-serif'; g.fillText(b.label, x, y - 16); } }
   const [px, pz, pyaw] = playerXZ();

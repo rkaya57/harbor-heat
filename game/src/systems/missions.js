@@ -122,9 +122,11 @@ const loseCops = (text) => ({
 
 // ---------------- the story ----------------
 const L = () => landmarks;
+// Mission givers stand a few metres down the sidewalk so their marker never covers a service marker.
+const beside = (p, dz = 6) => ({ ...p, z: p.z + dz });
 export const MISSIONS = [
   {
-    id: 'homecoming', title: 'Homecoming', giver: () => L().safehouse, reward: 200,
+    id: 'homecoming', title: 'Homecoming', giver: () => beside(L().safehouse), reward: 200,
     steps: [
       talk([
         ['Nico', 'Six years away and Solara Bay still smells like salt and sunscreen.'],
@@ -152,7 +154,7 @@ export const MISSIONS = [
     ],
   },
   {
-    id: 'rush', title: 'Rush Order', giver: () => L().garage, reward: 400,
+    id: 'rush', title: 'Rush Order', giver: () => beside(L().garage), reward: 400,
     steps: [
       talk([['Sal', 'Package at the Starlite on the Coral Strip. Warehouse 7 wants it in ninety seconds or the deal is off.']]),
       goTo(() => frontOf(2, 6, 'n', 6), 'Pick up the package at the <b>Coral Strip</b>.', { radius: 3 }),
