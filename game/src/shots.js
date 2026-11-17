@@ -97,11 +97,12 @@ const SCENES = {
       cam.fov = 58; cam.updateProjectionMatrix();
     };
     simulate(api, 1.1, (t) => {
-      p.yaw = face(); p.vx = p.vz = 0; p.health = 100;
+      p.yaw = face(); p.vx = p.vz = 0; p.health = 100; p.hitT = 0; // staged: Nico shrugs off the first rounds
       rig.yaw = p.yaw; rig.pitch = 0.02;
       input.mouse.right = true;
       if (t > 0.5) { input.mouse.left = true; input.mouse.leftPressed = true; }
     });
+    document.getElementById('damage-vignette').style.opacity = 0; // hits from the last frame
   },
 };
 
